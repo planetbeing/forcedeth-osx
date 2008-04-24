@@ -1,0 +1,6 @@
+#!/bin/sh
+sudo kextunload /tmp/forcedeth.kext
+sudo kextunload /tmp/forcedeth-d.kext
+sudo kextunload /tmp/forcedeth-nock.kext
+sudo kextunload /tmp/forcedeth-nockd.kext
+sudo rm -rf /tmp/forcedeth*.kext

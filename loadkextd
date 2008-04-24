@@ -1,0 +1,4 @@
+#!/bin/sh
+sudo cp -R build/release/forcedeth-d.kext /tmp/
+sudo kextload -v /tmp/forcedeth-d.kext
+
