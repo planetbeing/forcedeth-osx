@@ -138,15 +138,21 @@ void com_triton_forcedeth::setBufSize() {
 	UInt32 mtu;
 	
 	mtu = interface->getMaxTransferUnit();
+	IOLog("forcedeth: setBufSize/Apple wants %d bytes\n", mtu);
 	
 	if(mtu > NV_PKTLIMIT_2) {
 		mtu = NV_PKTLIMIT_2;
 	}
 	
-	if( mtu <= kIOEthernetMaxPacketSize )
+	IOLog("forcedeth: setBufSize/We can give them %d bytes\n", mtu);
+	
+	if( mtu <= kIOEthernetMaxPacketSize  && kIOEthernetMaxPacketSize <= NV_PKTLIMIT_2 ) {
 		rxBufSz = kIOEthernetMaxPacketSize + NV_RX_HEADERS;
-	else
+		IOLog("forcedeth: setBufSize/Setting with regards to kIOEthernetMaxPacketSize(%d) -- %d bytes\n", kIOEthernetMaxPacketSize, rxBufSz);
+	} else {
 		rxBufSz = mtu + NV_RX_HEADERS;
+		IOLog("forcedeth: setBufSize/Setting with regards to mtu(%d) -- %d bytes\n", mtu, rxBufSz);
+	}
 }
 
 bool com_triton_forcedeth::updateLinkSpeed() {

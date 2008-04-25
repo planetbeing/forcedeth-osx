@@ -531,9 +531,16 @@ IOReturn com_triton_forcedeth::enable(IOService *provider)
 	bool ret;
 	UInt32 i;
 	
+	nicTx = 0;
+	curRx = 0;
+	linkspeed = 0;
+		
+	setBufSize();
+	
 	IOLog("forcedeth: Enabling... ");
 	
-	do {	
+	do {
+			
 		// 1) erase previous misconfiguration
 		// 4.1-1: stop adapter: ignored, 4.3 seems to be overkill
 		promiscuousMode = false;
@@ -549,11 +556,7 @@ IOReturn com_triton_forcedeth::enable(IOService *provider)
 		IOLog("1");
 
 		// 2) initialize descriptor rings
-		nicTx = 0;
-		curRx = 0;
-		linkspeed = 0;
 		
-		setBufSize();
 		if( !initRing() )
 			break;
 
