@@ -138,6 +138,11 @@ void com_triton_forcedeth::setBufSize() {
 	UInt32 mtu;
 	
 	mtu = interface->getMaxTransferUnit();
+	
+	if(mtu > NV_PKTLIMIT_2) {
+		mtu = NV_PKTLIMIT_2;
+	}
+	
 	if( mtu <= kIOEthernetMaxPacketSize )
 		rxBufSz = kIOEthernetMaxPacketSize + NV_RX_HEADERS;
 	else
@@ -720,11 +725,6 @@ void com_triton_forcedeth::txDone() {
 }
 
 void com_triton_forcedeth::updateMulticast(UInt32 pff, UInt32 addrA, UInt32 addrB, UInt32 maskA, UInt32 maskB) {
-	if(locked) {
-		IOLog("updateMulticast mutex violation");
-	} else {
-		locked = true;
-	}
 
 	addrA |= NVREG_MCASTADDRA_FORCE;
 	pff |= NVREG_PFF_ALWAYS;
@@ -736,8 +736,6 @@ void com_triton_forcedeth::updateMulticast(UInt32 pff, UInt32 addrA, UInt32 addr
 	writeRegister(NvRegMulticastMaskB, maskB);
 	writeRegister(NvRegPacketFilterFlags, pff);
 	startRx();
-	
-	locked = false;
 	
 	//IOLockUnlock(lock);
 }

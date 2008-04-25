@@ -300,7 +300,7 @@ enum {
 #define HZ 100
 #define OOM_REFILL      (1+HZ/20)
 #define POLL_WAIT       (1+HZ/100)
-#define LINK_TIMEOUT    (3*HZ)
+#define LINK_TIMEOUT    (3*HZ*100)
 
 /* PHY defines */
 #define PHY_OUI_MARVELL 0x5043
@@ -393,6 +393,7 @@ private:
 	UInt16		deviceID;
 	UInt16		subVendID;
 	UInt16		subDevID;
+	UInt8		revisionID;
 	
 	IOWorkLoop			*workLoop;
 	IOTimerEventSource	*nicPollTimer;
@@ -430,8 +431,6 @@ private:
 	bool			timerIRQ;
 	bool			debugMode;
 	
-	bool locked;
-	
 	/* rx specific fields.
 		* Locking: Within irq hander or disable_irq+spin_lock(&np->lock);
 	*/
@@ -456,7 +455,7 @@ private:
 	/* media detection workaround.
 		* Locking: Within irq hander or disable_irq+spin_lock(&np->lock); */
 	bool			needLinkTimer;
-	unsigned long	linkTimeout;
+	UInt64			linkTimeout;
 	
 	// Some memory crap. I'm learning way too much about this shit.
 	IOMbufNaturalMemoryCursor *rxMbufCursor;

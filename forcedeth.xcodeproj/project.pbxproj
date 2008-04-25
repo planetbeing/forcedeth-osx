@@ -175,7 +175,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd $BUILT_PRODUCTS_DIR\nrm -rf $PRODUCT_NAME-d.kext\nrm -rf $PRODUCT_NAME-nock.kext\nrm -rf $PRODUCT_NAME-nockd.kext\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-d.kext\ncp $SRCROOT/Debug.plist $PRODUCT_NAME-d.kext/Contents/Info.plist\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-nock.kext\ncp $SRCROOT/NoCK.plist $PRODUCT_NAME-nock.kext/Contents/Info.plist\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-nockd.kext\ncp $SRCROOT/NoCKDebug.plist $PRODUCT_NAME-nockd.kext/Contents/Info.plist\n\nrm -rf $SRCROOT/build/Debug/$PRODUCT_NAME.kext 2>/dev/null\ncp -R $PRODUCT_NAME-nockd.kext $SRCROOT/build/Debug/$PRODUCT_NAME.kext 2>/dev/null\n\ncd $SRCROOT/..\n\nzip -r forcedeth.zip forcedeth";
+			shellScript = "cd $BUILT_PRODUCTS_DIR\nrm -rf $PRODUCT_NAME-d.kext\nrm -rf $PRODUCT_NAME-nock.kext\nrm -rf $PRODUCT_NAME-nockd.kext\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-d.kext\ncp $SRCROOT/Debug.plist $PRODUCT_NAME-d.kext/Contents/Info.plist\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-nock.kext\ncp $SRCROOT/NoCK.plist $PRODUCT_NAME-nock.kext/Contents/Info.plist\n\ncp -R $PRODUCT_NAME.kext $PRODUCT_NAME-nockd.kext\ncp $SRCROOT/NoCKDebug.plist $PRODUCT_NAME-nockd.kext/Contents/Info.plist\n\nrm -rf $SRCROOT/build/Debug/$PRODUCT_NAME.kext 2>/dev/null\ncp -R $PRODUCT_NAME-nockd.kext $SRCROOT/build/Debug/$PRODUCT_NAME.kext 2>/dev/null\n\ncd $SRCROOT/..\n\nzip -r forcedeth.zip forcedeth-osx";
 		};
 /* End PBXShellScriptBuildPhase section */
 

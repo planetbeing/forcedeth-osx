@@ -47,11 +47,16 @@ OSDefineMetaClassAndStructors(com_triton_forcedeth, IOEthernetController)
 void com_triton_forcedeth::nicIRQ() {
 	int i;
 	UInt32 events;
+	uint32_t sec;
+	uint32_t usec;
+	UInt64 curTime;
 	
-	if(locked) {
-		IOLog("nicIRQ mutex violation");
-	} else {
-		locked = true;
+	clock_get_system_microtime(&sec, &usec);
+	curTime = (sec * 1000000UL) + usec;
+	
+	if(needLinkTimer && (curTime >= linkTimeout)) {
+		linkChange();
+		linkTimeout = curTime + LINK_TIMEOUT;
 	}
 	
 	for( i = 0; ; i++ ) {
@@ -75,6 +80,7 @@ void com_triton_forcedeth::nicIRQ() {
 			//IOLockUnlock(lock);
 		}
 		
+		
 		if( events & NVREG_IRQ_TX_ERR ) {
 			IOLog("forcedeth: Received irq with events 0x%x. Probably TX fail.\n", events);
 		}
@@ -94,8 +100,6 @@ void com_triton_forcedeth::nicIRQ() {
 			break;
 		}
 	}
-	
-	locked = false;
 }
 void com_triton_forcedeth::doNicPoll() {
 	interrupt->disable();
@@ -114,18 +118,11 @@ UInt32 com_triton_forcedeth::outputPacket(mbuf_t buf, void *param) {
 	unsigned int nr;
 	IOPhysicalSegment vector[TX_LIMIT_STOP];
 	
-	if(locked) {
-		IOLog("outputPacket mutex violation");
-	} else {
-		locked = true;
-	}
-	
 	//IOLockLock(lock);
 
 	if( (nextTx - nicTx) > TX_LIMIT_STOP ) {
 		//IOLockUnlock(lock);
 		IOLog("forcedeth: NIC ring full, stalling.\n");
-		locked = false;
 		return kIOReturnOutputStall;
 	}
 
@@ -137,7 +134,6 @@ UInt32 com_triton_forcedeth::outputPacket(mbuf_t buf, void *param) {
 	if( (segments = txMbufCursor->getPhysicalSegmentsWithCoalesce(buf, &vector[0], maxSegments)) == 0 ) {
 		//IOLockUnlock(lock);
 		IOLog("forcedeth: NIC ring full, stalling.\n");
-		locked = false;
 		return kIOReturnOutputStall;
 	}
 	
@@ -180,8 +176,6 @@ UInt32 com_triton_forcedeth::outputPacket(mbuf_t buf, void *param) {
 	//IOLockUnlock(lock);
 	
 	writeRegister(NvRegTxRxControl, NVREG_TXRXCTL_KICK | txrxCtlBits);
-
-	locked = false;
 	return kIOReturnOutputSuccess;
 }
 
@@ -189,7 +183,7 @@ bool com_triton_forcedeth::init(OSDictionary *dict)
 {
 	OSBoolean *boolVal;
     bool res = super::init(dict);
-	IOLog("forcedeth: Version 0.3\n");
+	IOLog("forcedeth: Version 0.3c\n");
     IOLog("forcedeth: Initializing.\n");
 	
 	//lock = IOLockAlloc();
@@ -204,8 +198,6 @@ bool com_triton_forcedeth::init(OSDictionary *dict)
 	nicPollTimer = NULL;
 	workLoop = NULL;
 	dictionary = NULL;
-	
-	locked = false;
 	
 	if( (boolVal = (OSBoolean *)getProperty("ChecksumReceive")) && boolVal->isTrue() ) {
 		rxCRC = true;
@@ -276,6 +268,7 @@ IOService *com_triton_forcedeth::probe(IOService *provider, SInt32
 		deviceID = device->configRead16(kIOPCIConfigDeviceID);
 		subVendID = device->configRead16(kIOPCIConfigSubSystemVendorID);
 		subDevID = device->configRead16(kIOPCIConfigSubSystemID);
+		revisionID = device->configRead8(kIOPCIConfigRevisionID);
 			
 		i = 0;
 		found = false;
@@ -309,16 +302,6 @@ IOService *com_triton_forcedeth::probe(IOService *provider, SInt32
 	return res;
 }
 
-/*bool com_triton_forcedeth::createWorkLoop() {
-	workLoop = IOWorkLoop::workLoop();
-
-	return (workLoop != NULL);
-}
-
-IOWorkLoop* com_triton_forcedeth::getWorkLoop() const {
-	return workLoop;
-}*/
- 
 bool com_triton_forcedeth::start(IOService *provider)
 {
 	int i;
@@ -346,10 +329,10 @@ bool com_triton_forcedeth::start(IOService *provider)
 		pktLimit = NV_PKTLIMIT_2;
 		txrxCtlBits = NVREG_TXRXCTL_DESC_2 | NVREG_TXRXCTL_RXCHECK;
 
-		IOLog("forcedeth: PCI system 0x%04X:0x%04X, subsystem 0x%04X:0x%04X opened.\n", vendorID, deviceID, subVendID, subDevID);
+		IOLog("forcedeth: PCI system 0x%04X:0x%04X, subsystem 0x%04X:0x%04X revision 0x%02X opened.\n", vendorID, deviceID, subVendID, subDevID, revisionID);
 
 		memSize = NV_PCI_REGSZ;
-		if (deviceID == 0x03EF)
+		if (deviceID == 0x03EF || deviceID == 0x0373 || deviceID == 0x0372)
 			memSize = NV_PCI_REGSZ_VER3;
 
 		memCount = device->getDeviceMemoryCount();
@@ -396,7 +379,7 @@ bool com_triton_forcedeth::start(IOService *provider)
 		origMac[0] = readRegister(NvRegMacAddrA);
 		origMac[1] = readRegister(NvRegMacAddrB);
 		
-		if (deviceID == 0x03EF) {
+		if (memSize == NV_PCI_REGSZ_VER3) {
 			/* mac address is already in correct order */
 			macAddr.bytes[0] = (origMac[0] >> 0) & 0xff;
 			macAddr.bytes[1] = (origMac[0] >> 8) & 0xff;
@@ -435,11 +418,14 @@ bool com_triton_forcedeth::start(IOService *provider)
 		writeRegister(NvRegWakeUpFlags, 0);
 		wolEnabled = false;
 		
-		if (deviceID == 0x03EF) 
+		if (deviceID == 0x03EF || deviceID == 0x0373 || deviceID == 0x0372 || deviceID == 0x0269 || deviceID == 0x0268) 
 		{
-			/* take phy and nic out of low power mode */
+			IOLog("forcedeth: Taking PHY and NIC out of low power mode\n");
 			powerstate = readRegister(NvRegPowerState2);
 			powerstate &= ~NVREG_POWERSTATE2_POWERUP_MASK;
+			if((deviceID == 0x0269 || deviceID == 0x0268) && revisionID >= 0xA3) {
+				powerstate |= NVREG_POWERSTATE2_POWERUP_REV_A3;
+			}
 			writeRegister(NvRegPowerState2, (UInt32) powerstate);
 		}
 
@@ -450,8 +436,22 @@ bool com_triton_forcedeth::start(IOService *provider)
 		if( timerIRQ )
 			irqMask |= NVREG_IRQ_TIMER;
 
+
 		needLinkTimer = true;
-		linkTimeout = LINK_TIMEOUT;
+		
+		{
+			uint32_t sec;
+			uint32_t usec;
+			UInt64 curTime;
+			
+			clock_get_system_microtime(&sec, &usec);
+			curTime = (sec * 1000000UL) + usec;
+			
+			if(needLinkTimer && (curTime >= linkTimeout)) {
+				linkIRQ();
+				linkTimeout = curTime + LINK_TIMEOUT;
+			}
+		}
 
 		phyAddr = 0;
 		phyOui = 0;
@@ -549,6 +549,10 @@ IOReturn com_triton_forcedeth::enable(IOService *provider)
 		IOLog("1");
 
 		// 2) initialize descriptor rings
+		nicTx = 0;
+		curRx = 0;
+		linkspeed = 0;
+		
 		setBufSize();
 		if( !initRing() )
 			break;
@@ -558,6 +562,7 @@ IOReturn com_triton_forcedeth::enable(IOService *provider)
 		txrxReset();
 		writeRegister(NvRegUnknownSetupReg6, 0);
 		inShutdown = 0;
+		
 		
 		IOLog(" 2");
 		
@@ -768,11 +773,6 @@ IOReturn com_triton_forcedeth::getHardwareAddress(IOEthernetAddress * addrP)
 
 IOReturn com_triton_forcedeth::setHardwareAddress(const IOEthernetAddress * addrP)
 {	
-	if(locked) {
-		IOLog("setHardwareAddress mutex violation");
-	} else {
-		locked = true;
-	}
 
 	macAddr = *addrP;;
 	if( ifEnabled ) {
@@ -785,11 +785,8 @@ IOReturn com_triton_forcedeth::setHardwareAddress(const IOEthernetAddress * addr
 		startRx();
 		//IOLockUnlock(lock);
 		outputQueue->start();
-		
-		locked = false;
 		return kIOReturnSuccess;
 	} else {
-		locked = false;
 		copyMacToHW();
 		return kIOReturnSuccess;
 	}
@@ -798,12 +795,6 @@ IOReturn com_triton_forcedeth::setHardwareAddress(const IOEthernetAddress * addr
 IOReturn com_triton_forcedeth::setWakeOnMagicPacket(bool active)
 {	
 	//IOLockLock(lock);
-	if(locked) {
-		IOLog("setWakeOnMagicPacket mutex violation");
-	} else {
-		locked = true;
-	}
-	
 	if( active ) {
 		writeRegister(NvRegWakeUpFlags, NVREG_WAKEUPFLAGS_ENABLE);
 		wolEnabled = true;
@@ -812,8 +803,6 @@ IOReturn com_triton_forcedeth::setWakeOnMagicPacket(bool active)
 		wolEnabled = false;
 	}
 	//IOLockUnlock(lock);
-	
-	locked = false;
 	return kIOReturnSuccess;
 }
 
